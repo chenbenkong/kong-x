@@ -1,0 +1,9 @@
+# 验证截图与脚本（非项目本体）
+_smoke_*.png
+validate.js
+*.log
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+desktop.ini

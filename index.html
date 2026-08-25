@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="天宫立体课堂——中国空间站交互式3D教案">
+  <title>天宫立体课堂 · 中国空间站3D教案</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- 标注层 -->
+  <div id="labels"></div>
+
+  <!-- 左上标题 -->
+  <header class="hud-title">
+    <div class="seal">天宫</div>
+    <div>
+      <h1>中国空间站 · 立体课堂</h1>
+      <p>TIANGONG SPACE STATION — INTERACTIVE 3D LESSON</p>
+    </div>
+    <button id="btn-drawer" class="btn btn-accent">📖 学习区</button>
+  </header>
+
+  <!-- 左下遥测 -->
+  <section class="telemetry" id="telemetry">
+    <div class="tele-item"><span class="k">轨道高度</span><span class="v" id="tl-alt">400.0 km</span></div>
+    <div class="tele-item"><span class="k">飞行速度</span><span class="v" id="tl-vel">7.68 km/s</span></div>
+    <div class="tele-item"><span class="k">绕地一圈</span><span class="v">≈90 分钟</span></div>
+    <div class="tele-item"><span class="k">已绕地球</span><span class="v" id="tl-orb">0 圈</span></div>
+    <div class="tele-item"><span class="k">累计航程</span><span class="v" id="tl-dist">0 万公里</span></div>
+    <div class="tele-item"><span class="k">轨道倾角</span><span class="v">≈42°</span></div>
+  </section>
+
+  <!-- 底部视角预设 -->
+  <nav class="views" id="views">
+    <button class="chip active" data-view="global">全局总览</button>
+    <button class="chip" data-view="tianhe">天和核心舱</button>
+    <button class="chip" data-view="wentian">问天实验舱</button>
+    <button class="chip" data-view="mengtian">梦天实验舱</button>
+    <button class="chip" data-view="top">T字构型俯瞰</button>
+    <button class="chip" data-view="horizon">地平线视角</button>
+  </nav>
+
+  <!-- 右侧控制台 -->
+  <aside class="console" id="console">
+    <div class="console-head">
+      <h2>控制台</h2>
+      <button id="console-toggle" title="收起/展开">‹</button>
+    </div>
+    <div class="console-body">
+      <h3>运行模拟</h3>
+      <div class="row">
+        <button id="btn-run" class="btn btn-run running">⏸ 暂停轨道</button>
+        <label class="inline">时间流速
+          <input type="range" id="rg-time" min="0" max="100" value="30">
+          <b id="lb-time">×30</b>
+        </label>
+      </div>
+
+      <h3>模型拆解</h3>
+      <label class="block">爆炸 / 组装
+        <input type="range" id="rg-explode" min="0" max="100" value="0">
+        <b id="lb-explode">0%</b>
+      </label>
+      <label class="check"><input type="checkbox" id="ck-wings" checked> 太阳翼展开状态</label>
+      <label class="block">剖切舱体透明度
+        <input type="range" id="rg-cut" min="0" max="100" value="0">
+        <b id="lb-cut">不剖切</b>
+      </label>
+      <label class="check"><input type="checkbox" id="ck-labels" checked> 显示舱段标注</label>
+
+      <h3>提示</h3>
+      <p class="hint">🖱️ 拖拽旋转 · 滚轮缩放<br>👆 点击任意舱段查看资料卡</p>
+      <label class="check"><input type="checkbox" id="ck-sound"> 环境音效</label>
+    </div>
+  </aside>
+
+  <!-- 舱段信息卡 -->
+  <section class="infocard hidden" id="infocard">
+    <button class="close" id="info-close">✕</button>
+    <div class="badge-row"><span class="badge" id="if-badge">舱段</span><h2 id="if-name"></h2></div>
+    <p class="en" id="if-en"></p>
+    <ul class="specs" id="if-specs"></ul>
+    <ul class="roles" id="if-roles"></ul>
+    <p class="fact" id="if-fact"></p>
+    <button class="btn btn-mini" id="if-focus">🎯 镜头对准此舱段</button>
+  </section>
+
+  <!-- 学习抽屉 -->
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head">
+      <h2>学习区</h2>
+      <button id="drawer-close">✕</button>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="goal">教学目标</button>
+      <button class="tab" data-tab="tour">认识三舱</button>
+      <button class="tab" data-tab="line">任务时间线</button>
+      <button class="tab" data-tab="facts">数据速查</button>
+      <button class="tab" data-tab="quiz">课堂测验</button>
+    </nav>
+    <div class="tab-body" id="tab-goal"></div>
+    <div class="tab-body hidden" id="tab-tour"></div>
+    <div class="tab-body hidden" id="tab-line"></div>
+    <div class="tab-body hidden" id="tab-facts"></div>
+    <div class="tab-body hidden" id="tab-quiz"></div>
+  </aside>
+
+  <script type="importmap">
+    { "imports": { "three": "./js/vendor/three.module.js" } }
+  </script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
