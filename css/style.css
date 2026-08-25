@@ -50,16 +50,16 @@ body::after {
 }
 .tag.main { font-weight: 700; }
 .tag.sub { font-weight: 600; }
-/* 悬停 / 选中：青色发光胶囊，醒目易读 */
+/* 悬停 / 选中：黄色发光胶囊，与高亮轮廓一致 */
 .tag.hot, .tag.active {
-  color: #eafffd; font-weight: 800;
-  background: rgba(0, 170, 190, 0.20);
-  border: 1px solid rgba(0, 234, 255, 0.55);
+  color: #fff7e0; font-weight: 800;
+  background: rgba(190, 150, 0, 0.18);
+  border: 1px solid rgba(255, 212, 0, 0.60);
   padding: 3px 10px; border-radius: 20px;
-  box-shadow: 0 0 16px rgba(0, 234, 255, 0.40);
+  box-shadow: 0 0 16px rgba(255, 212, 0, 0.45);
   backdrop-filter: blur(2px);
 }
-.tag.hot i, .tag.active i { background: #00eaff; box-shadow: 0 0 10px #00eaff; }
+.tag.hot i, .tag.active i { background: #ffd400; box-shadow: 0 0 10px #ffd400; }
 
 /* ── 标题 ── */
 .hud-title {

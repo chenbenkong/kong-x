@@ -160,12 +160,31 @@ export function buildStation(scene) {
     parts[id] = { group, label };
   }
 
+  // 爆炸时把内部子系统「抽」出舱体的偏移表（舱段主组由下方 explodables 注册）
+  const explodeNodes = [];
+  let explodeSeq = 0;
+  function regExplode(obj, dir) {
+    dir = dir.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), (explodeSeq++ % 8) * 0.22); // 轻微扇形分散避免叠在一起
+    explodeNodes.push({ obj, base: obj.position.clone(), dir });
+  }
+
   // 注册可拾取 mesh：skipIfSet=true 时跳过已有 partId（用于整舱打标不覆盖内部子系统）
   function tagPick(group, id, skipIfSet) {
     group.traverse(o => {
       if (o.isMesh && !(skipIfSet && o.userData.partId)) { o.userData.partId = id; pickables.push(o); }
     });
     registerPart(id, group);
+    // 内部子系统（非整舱）：爆炸时从舱体内抽出，散到舱体外侧，便于观察与点选
+    if (!skipIfSet) {
+      let rep = new THREE.Vector3();
+      group.traverse(o => { if (rep.lengthSq() === 0 && o.isMesh) rep.copy(o.position); });
+      const radial = new THREE.Vector3(0, rep.y, rep.z);
+      if (radial.lengthSq() < 0.04) radial.set(0, 1, 0);
+      radial.normalize();
+      const dir = radial.multiplyScalar(4.2);
+      dir.y += 1.6;                       // 抬离舱体，散到外侧
+      regExplode(group, dir);
+    }
   }
 
   function detailHull(group, r, len, cx) {
@@ -584,14 +603,16 @@ export function buildStation(scene) {
   }
 
   // ── 状态应用 ──
-  // 可爆炸对象（舱段主组；子系统随所属舱段一同平移，避免叠加）
-  const explodables = [tianhe, ...tianhe.children.filter(o => o.userData.explodeDir), wentian, mengtian, shenzhou, tianzhou];
-  const basePos = new Map();
-  for (const o of explodables) basePos.set(o, o.position.clone());
-  function applyExplode(t) {
-    for (const [o, base] of basePos) { const d = o.userData.explodeDir; if (!d) continue; o.position.copy(base).addScaledVector(d, t); }
+  // 可爆炸对象：舱段主组（沿各自方向散开）+ 内部子系统（已由 tagPick 注册，爆炸时从舱体内抽出）
+  for (const o of [tianhe, ...tianhe.children.filter(c => c.userData.explodeDir), wentian, mengtian, shenzhou, tianzhou]) {
+    if (o.userData.explodeDir && o.userData.explodeDir.lengthSq() > 0) regExplode(o, o.userData.explodeDir);
   }
+  function applyExplode(t) {
+    for (const n of explodeNodes) n.obj.position.copy(n.base).addScaledVector(n.dir, t);
+  }
+  let cutVal = 0;
   function applyCut(v) {
+    cutVal = v;
     for (const m of hullMats) { m.transparent = v > 0.02; m.opacity = 1 - v * 0.88; m.depthWrite = v <= 0.02; }
     for (const rk of rackMeshes) rk.visible = v > 0.04;
   }
@@ -619,5 +640,5 @@ export function buildStation(scene) {
   }
   tick(0.01, 1);
 
-  return { parts, pickables, wings, root, tick, applyExplode, applyCut, applyWings };
+  return { parts, pickables, wings, root, tick, applyExplode, applyCut, applyWings, getCut: () => cutVal };
 }

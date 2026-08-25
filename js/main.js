@@ -65,7 +65,7 @@ for (const m of stationApi.pickables) {
 }
 
 // ── 高亮轮廓（逆向外壳法：给部件套一层青色 BackSide 外壳，呈现发光描边）──
-const outlineMat = new THREE.MeshBasicMaterial({ color: 0x00eaff, side: THREE.BackSide, transparent: true, opacity: 0.92, depthWrite: false });
+const outlineMat = new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.BackSide, transparent: true, opacity: 0.95, depthWrite: false });
 const outlineOwners = [];
 function clearOutline() {
   for (const m of outlineOwners) {
@@ -103,39 +103,45 @@ function focusPart(id) {
 
 const ui = initUI({ stationApi, controls, focusPart });
 
-// ── 拾取 ──
+// ── 拾取（剖切 / 爆炸时「穿透」舱壳，直接点选内部部件）──
+const CABIN_IDS = new Set(['tianhe', 'wentian', 'mengtian', 'shenzhou', 'tianzhou']);
+let explodeT = 0, cutT = 0;
+document.getElementById('rg-explode').addEventListener('input', e => { explodeT = +e.target.value / 100; });
+document.getElementById('rg-cut').addEventListener('input', e => { cutT = +e.target.value / 100; });
+
 const ray = new THREE.Raycaster();
 let downXY = null;
-canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
-canvas.addEventListener('pointerup', e => {
-  if (!downXY) return;
-  const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
-  downXY = null;
-  if (moved > 6) return;
-  const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(stationApi.pickables, false);
-  if (hits.length) {
-    let o = hits[0].object;
-    while (o && !o.userData.partId) o = o.parent;
-    if (o) { focusPart(o.userData.partId); activeId = o.userData.partId; }
-  }
-});
 let activeId = null;
 let hoverId = null;
 
-// 悬停拾取：高亮光标 + 名称提示（轮廓在 animate 中按 hoverId||activeId 更新）
-function pickPart(e) {
+// 返回点击/悬停处的部件 id；剖切或爆炸时忽略半透明舱壳，优先命中内部子系统
+function pickAt(e) {
+  const seeThrough = cutT > 0.1 || explodeT > 0.1;
   const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(stationApi.pickables, false);
+  let hits = ray.intersectObjects(stationApi.pickables, false);
+  if (seeThrough) {
+    const inner = hits.filter(h => !CABIN_IDS.has(h.object.userData.partId));
+    if (inner.length) hits = inner;
+  }
   if (!hits.length) return null;
   let o = hits[0].object;
   while (o && !o.userData.partId) o = o.parent;
   return o ? o.userData.partId : null;
 }
+
+canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerup', e => {
+  if (!downXY) return;
+  const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
+  downXY = null;
+  if (moved > 6) return;            // 拖拽旋转，不触发点选
+  const id = pickAt(e);
+  if (id) { focusPart(id); activeId = id; }
+  else activeId = null;             // 点空白处取消选中
+});
 canvas.addEventListener('pointermove', e => {
-  hoverId = pickPart(e);
+  hoverId = pickAt(e);
   canvas.style.cursor = hoverId ? 'pointer' : '';
 });
 canvas.addEventListener('pointerleave', () => { hoverId = null; canvas.style.cursor = ''; });
@@ -190,7 +196,7 @@ function animate() {
   const wantOutline = hoverId || activeId;
   if (wantOutline !== lastOutline) { setOutline(wantOutline); lastOutline = wantOutline; }
 
-  updateLabels(camera, stationApi.parts, ui.labelsVisible(), activeId, hoverId);
+  updateLabels(camera, stationApi.parts, ui.labelsVisible(), ui.showParts(), (cutT > 0.1 || explodeT > 0.1), activeId, hoverId);
   composer.render();
 }
 animate();
@@ -206,7 +212,11 @@ window.__tg = {
   getHover:   () => hoverId,
   getActive:  () => activeId,
   outlineCount: () => outlineOwners.length,
+  outlineColor: () => outlineMat.color.getHex(),
   labelCount: () => document.querySelectorAll('#labels .tag').length,
+  setCutT:     (t) => { cutT = t; },
+  setExplodeT: (t) => { explodeT = t; },
+  pickScreen: (x, y) => pickAt({ clientX: x, clientY: y }),
   projectPart: (id) => {
     const p = stationApi.parts[id]; if (!p || !p.label) return null;
     const v = new THREE.Vector3(); p.label.getWorldPosition(v); v.project(camera);

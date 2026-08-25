@@ -58,7 +58,7 @@ function buildLabels(parts) {
 }
 
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3();
-export function updateLabels(camera, parts, visible, activeId, hoverId) {
+export function updateLabels(camera, parts, labelsVisible, showParts, revealAll, activeId, hoverId) {
   camera.getWorldDirection(_d);
   const w = innerWidth, h = innerHeight;
   for (const [id, el] of labelEls) {
@@ -70,8 +70,10 @@ export function updateLabels(camera, parts, visible, activeId, hoverId) {
     const onScreen = _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2;
     const isMain = MAIN_IDS.includes(id);
     const isFocus = id === activeId || id === hoverId;
-    // 主舱：标注开启即常显；子系统：仅在悬停/选中时显示
-    const show = visible && facing && onScreen && (isMain || isFocus);
+    // 主舱：标注开启即常显；部件：开启「显示部件名称」且（悬停/选中 或 已剖切/爆炸展开）时显示
+    const show = isMain
+      ? (labelsVisible && facing && onScreen)
+      : (showParts && facing && onScreen && (isFocus || revealAll));
     el.style.opacity = show ? (isFocus ? '1' : (isMain ? '0.85' : '1')) : '0';
     if (show) {
       el.style.left = ((_v.x * 0.5 + 0.5) * w) + 'px';
@@ -212,7 +214,9 @@ export function initUI({ stationApi, controls, focusPart }) {
 
   // 标注
   let showLabels = true;
+  let showParts = true;
   $('#ck-labels').onchange = e => { showLabels = e.target.checked; };
+  $('#ck-parts').onchange = e => { showParts = e.target.checked; };
 
   // 音效
   $('#ck-sound').onchange = e => {
@@ -247,6 +251,7 @@ export function initUI({ stationApi, controls, focusPart }) {
     isRunning: () => running,
     getTimeScale: () => timeScale,
     labelsVisible: () => showLabels,
+    showParts: () => showParts,
   };
 }
 
