@@ -4,6 +4,7 @@ validate.js
 verify.js
 verify.png
 verify.out
+verify_shot.png
 *.log
 
 # 系统/编辑器
