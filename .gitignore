@@ -1,6 +1,8 @@
 # 验证截图与脚本（非项目本体）
 _smoke_*.png
 validate.js
+verify.js
+verify.png
 *.log
 
 # 系统/编辑器

@@ -18,7 +18,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.7;
+renderer.toneMappingExposure = 0.42;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x02040a);
@@ -52,7 +52,7 @@ controls.sph.set(46, 1.12, 0.55); controls.sphTo.copy(controls.sph);
 // ── 后期：泛光 ──
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.95, 0.6, 0.82);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.45, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
