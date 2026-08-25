@@ -56,6 +56,42 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
+// ── 部件→网格 映射（用于高亮轮廓）──
+const partMeshes = new Map();
+for (const m of stationApi.pickables) {
+  const id = m.userData.partId; if (!id) continue;
+  if (!partMeshes.has(id)) partMeshes.set(id, []);
+  partMeshes.get(id).push(m);
+}
+
+// ── 高亮轮廓（逆向外壳法：给部件套一层青色 BackSide 外壳，呈现发光描边）──
+const outlineMat = new THREE.MeshBasicMaterial({ color: 0x00eaff, side: THREE.BackSide, transparent: true, opacity: 0.92, depthWrite: false });
+const outlineOwners = [];
+function clearOutline() {
+  for (const m of outlineOwners) {
+    for (let i = m.children.length - 1; i >= 0; i--) {
+      if (m.children[i].userData.outline) m.remove(m.children[i]);
+    }
+  }
+  outlineOwners.length = 0;
+}
+function setOutline(partId) {
+  clearOutline();
+  if (!partId) return;
+  const meshes = partMeshes.get(partId);
+  if (!meshes) return;
+  for (const m of meshes) {
+    if (!m.geometry) continue;
+    const o = new THREE.Mesh(m.geometry, outlineMat);
+    o.userData.outline = true;
+    o.scale.setScalar(1.07);       // 比原部件大 7%，形成外轮廓
+    o.renderOrder = 4;
+    m.add(o);                      // 作为子物体，自动跟随机械臂摆动等动效
+    outlineOwners.push(m);
+  }
+}
+let lastOutline = null;
+
 // ── 聚焦某舱段 ──
 function focusPart(id) {
   const part = stationApi.parts[id]; if (!part) return;
@@ -86,6 +122,23 @@ canvas.addEventListener('pointerup', e => {
   }
 });
 let activeId = null;
+let hoverId = null;
+
+// 悬停拾取：高亮光标 + 名称提示（轮廓在 animate 中按 hoverId||activeId 更新）
+function pickPart(e) {
+  const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(stationApi.pickables, false);
+  if (!hits.length) return null;
+  let o = hits[0].object;
+  while (o && !o.userData.partId) o = o.parent;
+  return o ? o.userData.partId : null;
+}
+canvas.addEventListener('pointermove', e => {
+  hoverId = pickPart(e);
+  canvas.style.cursor = hoverId ? 'pointer' : '';
+});
+canvas.addEventListener('pointerleave', () => { hoverId = null; canvas.style.cursor = ''; });
 
 // ── 遥测 ──
 const PERIOD_S = 90 * 60;
@@ -132,7 +185,12 @@ function animate() {
   }
 
   controls.update(dt);
-  updateLabels(camera, stationApi.parts, ui.labelsVisible(), activeId);
+
+  // 高亮轮廓：悬停优先，否则显示已选中部件
+  const wantOutline = hoverId || activeId;
+  if (wantOutline !== lastOutline) { setOutline(wantOutline); lastOutline = wantOutline; }
+
+  updateLabels(camera, stationApi.parts, ui.labelsVisible(), activeId, hoverId);
   composer.render();
 }
 animate();
@@ -144,5 +202,15 @@ window.__tg = {
   setWings:   v => stationApi.applyWings(v ? 1 : 0),
   setView:    n => { import('./ui.js').then(m => m.applyView(n, controls, stationApi.parts)); },
   focusPart,
+  // 调试/自检钩子
+  getHover:   () => hoverId,
+  getActive:  () => activeId,
+  outlineCount: () => outlineOwners.length,
+  labelCount: () => document.querySelectorAll('#labels .tag').length,
+  projectPart: (id) => {
+    const p = stationApi.parts[id]; if (!p || !p.label) return null;
+    const v = new THREE.Vector3(); p.label.getWorldPosition(v); v.project(camera);
+    return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, z: v.z };
+  },
 };
 stationApi.applyCut(0);

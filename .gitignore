@@ -3,6 +3,7 @@ _smoke_*.png
 validate.js
 verify.js
 verify.png
+verify.out
 *.log
 
 # 系统/编辑器

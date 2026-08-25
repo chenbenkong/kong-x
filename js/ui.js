@@ -34,20 +34,31 @@ export const sound = {
 };
 
 // ── 标注 DOM ──
+// 主舱（始终显示名称）；子系统（悬停/选中时才显示，避免 41 个名字糊屏）
+const MAIN_IDS = LABELS.map(L => L.id);
 const labelEls = new Map();
-function buildLabels() {
+function buildLabels(parts) {
   const wrap = $('#labels');
-  for (const L of LABELS) {
+  const mk = (id, text, main) => {
     const el = document.createElement('div');
-    el.className = 'tag'; el.innerHTML = `<i></i>${L.text}`;
+    el.className = 'tag ' + (main ? 'main' : 'sub');
+    el.dataset.id = id;
+    el.innerHTML = `<i></i>${text}`;
     el.style.opacity = '0';
     wrap.appendChild(el);
-    labelEls.set(L.id, el);
+    labelEls.set(id, el);
+  };
+  for (const L of LABELS) mk(L.id, L.text, true);           // 主舱常显
+  for (const id of Object.keys(PART_INFO)) {                // 子系统自动生成（取自资料卡名称）
+    if (MAIN_IDS.includes(id)) continue;
+    const p = parts[id];
+    if (!p || !p.label) continue;
+    mk(id, PART_INFO[id].name, false);
   }
 }
 
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3();
-export function updateLabels(camera, parts, visible, activeId) {
+export function updateLabels(camera, parts, visible, activeId, hoverId) {
   camera.getWorldDirection(_d);
   const w = innerWidth, h = innerHeight;
   for (const [id, el] of labelEls) {
@@ -56,13 +67,18 @@ export function updateLabels(camera, parts, visible, activeId) {
     part.label.getWorldPosition(_v);
     const facing = _v.clone().sub(camera.position).dot(_d) > 0; // 在相机前方
     _v.project(camera);
-    const on = visible && facing && _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2;
-    el.style.opacity = on ? (activeId && activeId !== id ? '0.35' : '1') : '0';
-    if (on) {
+    const onScreen = _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2;
+    const isMain = MAIN_IDS.includes(id);
+    const isFocus = id === activeId || id === hoverId;
+    // 主舱：标注开启即常显；子系统：仅在悬停/选中时显示
+    const show = visible && facing && onScreen && (isMain || isFocus);
+    el.style.opacity = show ? (isFocus ? '1' : (isMain ? '0.85' : '1')) : '0';
+    if (show) {
       el.style.left = ((_v.x * 0.5 + 0.5) * w) + 'px';
       el.style.top  = ((-_v.y * 0.5 + 0.5) * h - 10) + 'px';
     }
-    el.classList.toggle('hot', id === activeId);
+    el.classList.toggle('hot', isFocus);
+    el.classList.toggle('active', id === activeId);
   }
 }
 
@@ -151,7 +167,7 @@ export function applyView(name, controls, parts) {
 
 // ── 总装 ──
 export function initUI({ stationApi, controls, focusPart }) {
-  buildLabels();
+  buildLabels(stationApi.parts);
 
   const console_ = $('#console');
   $('#console-toggle').onclick = () => {

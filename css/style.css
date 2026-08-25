@@ -48,7 +48,18 @@ body::after {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--blue); box-shadow: 0 0 8px var(--blue);
 }
-.tag.hot i { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+.tag.main { font-weight: 700; }
+.tag.sub { font-weight: 600; }
+/* 悬停 / 选中：青色发光胶囊，醒目易读 */
+.tag.hot, .tag.active {
+  color: #eafffd; font-weight: 800;
+  background: rgba(0, 170, 190, 0.20);
+  border: 1px solid rgba(0, 234, 255, 0.55);
+  padding: 3px 10px; border-radius: 20px;
+  box-shadow: 0 0 16px rgba(0, 234, 255, 0.40);
+  backdrop-filter: blur(2px);
+}
+.tag.hot i, .tag.active i { background: #00eaff; box-shadow: 0 0 10px #00eaff; }
 
 /* ── 标题 ── */
 .hud-title {
