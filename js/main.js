@@ -3,14 +3,15 @@ import { EffectComposer } from './vendor/addons/postprocessing/EffectComposer.js
 import { RenderPass } from './vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/addons/postprocessing/OutputPass.js';
-import { OrbitCam } from './controls.js';
-import { buildEnvironment } from './environment.js';
-import { buildStation } from './station.js';
-import { initUI, updateLabels, showInfo } from './ui.js';
+import { OrbitCam } from './controls.js?v=20260825c';
+import { buildEnvironment } from './environment.js?v=20260825c';
+import { buildStation } from './station.js?v=20260825c';
+import { initUI, updateLabels, showInfo } from './ui.js?v=20260825c';
 
 // ─────────────────────────────────────────
 // 天宫立体课堂 · 主入口（含 UnrealBloom 科技泛光）
 // ─────────────────────────────────────────
+console.log('[tiangong] build 20260825c — 黄色高亮轮廓 + 穿透拾取 + 爆炸抽出内部部件');
 const canvas = document.getElementById('scene');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -64,7 +65,7 @@ for (const m of stationApi.pickables) {
   partMeshes.get(id).push(m);
 }
 
-// ── 高亮轮廓（逆向外壳法：给部件套一层青色 BackSide 外壳，呈现发光描边）──
+// ── 高亮轮廓（逆向外壳法：给部件套一层黄色 BackSide 外壳，呈现发光描边）──
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.BackSide, transparent: true, opacity: 0.95, depthWrite: false });
 const outlineOwners = [];
 function clearOutline() {

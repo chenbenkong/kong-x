@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PART_INFO, LABELS, OBJECTIVES, TOUR, TIMELINE, FACTS, QUIZ } from './data.js';
+import { PART_INFO, LABELS, OBJECTIVES, TOUR, TIMELINE, FACTS, QUIZ } from './data.js?v=20260825c';
 
 const $ = s => document.querySelector(s);
 
