@@ -99,9 +99,9 @@ export function buildStation(scene) {
   const tgTex    = makeTextDecal('天宫');
 
   const M = {
-    hull:   new THREE.MeshStandardMaterial({ map: hullTex, metalness: .55, roughness: .5, color: 0xffffff }),
-    hullD:  new THREE.MeshStandardMaterial({ color: 0xaab4c2, metalness: .6, roughness: .5 }),
-    foil:   new THREE.MeshStandardMaterial({ map: foilTex, metalness: .82, roughness: .35, color: 0xffffff }),
+    hull:   new THREE.MeshStandardMaterial({ map: hullTex, metalness: .55, roughness: .5, color: 0xffffff, emissive: 0xffffff, emissiveMap: hullTex, emissiveIntensity: .32 }),
+    hullD:  new THREE.MeshStandardMaterial({ color: 0xc4cdda, metalness: .6, roughness: .5, emissive: 0x9fb0c4, emissiveIntensity: .35 }),
+    foil:   new THREE.MeshStandardMaterial({ map: foilTex, metalness: .82, roughness: .35, color: 0xffffff, emissive: 0xfff0d0, emissiveMap: foilTex, emissiveIntensity: .28 }),
     dark:   new THREE.MeshStandardMaterial({ color: 0x1b2230, metalness: .6, roughness: .5 }),
     orange: new THREE.MeshStandardMaterial({ color: 0xff7a33, metalness: .5, roughness: .45, emissive: 0x3a1500, emissiveIntensity: .3 }),
     arm:    new THREE.MeshStandardMaterial({ color: 0xdfe6ef, metalness: .72, roughness: .3 }),
@@ -117,6 +117,8 @@ export function buildStation(scene) {
     label:  new THREE.MeshBasicMaterial({ map: tgTex, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
     // ── 内部子系统专用材质 ──
     ecs:    new THREE.MeshStandardMaterial({ color: 0x2fa9a0, metalness: .5, roughness: .5, emissive: 0x0c3a36, emissiveIntensity: .35 }),
+    ecsOxy: new THREE.MeshStandardMaterial({ color: 0x2f7fb2, metalness: .5, roughness: .5, emissive: 0x0c2a3a, emissiveIntensity: .35 }),
+    ecsCo2: new THREE.MeshStandardMaterial({ color: 0x4a8a5a, metalness: .5, roughness: .5, emissive: 0x103018, emissiveIntensity: .35 }),
     cmg:    new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .85, roughness: .3 }),
     gyro:   new THREE.MeshStandardMaterial({ color: 0xd8dde4, metalness: .8, roughness: .25 }),
     sleep:  new THREE.MeshStandardMaterial({ color: 0x35506b, metalness: .4, roughness: .6 }),
@@ -138,16 +140,32 @@ export function buildStation(scene) {
   const parts = {};
   const root = new THREE.Group(); scene.add(root);
 
+  // ── 空间站专属补光（仅照亮 ±70 内，不波及下方地球）──
+  const fillA = new THREE.PointLight(0xdfeeff, 2600, 72, 2); fillA.position.set(26, 34, 30); scene.add(fillA);
+  const fillB = new THREE.PointLight(0xbfd8ff, 1500, 72, 2); fillB.position.set(-32, -16, -26); scene.add(fillB);
+
   const cylX = (r, len, mat, seg = 48) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat); m.rotation.z = Math.PI / 2; return m; };
   const coneX = (r1, r2, len, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, len, 48), mat); m.rotation.z = Math.PI / 2; return m; };
   const ring = (r, tube, mat) => new THREE.Mesh(new THREE.TorusGeometry(r, tube, 16, 48), mat);
   const box = (w, h, d, mat) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+
+  // 自动登记 partId → 生成 label 锚点（修复「点击子系统无响应」：focusPart 依赖 parts[id].label）
+  function registerPart(id, group) {
+    if (parts[id]) return;
+    const box = new THREE.Box3().setFromObject(group);
+    const c = box.getCenter(new THREE.Vector3());
+    const label = new THREE.Object3D();
+    group.add(label);
+    label.position.copy(group.worldToLocal(c.clone()));
+    parts[id] = { group, label };
+  }
 
   // 注册可拾取 mesh：skipIfSet=true 时跳过已有 partId（用于整舱打标不覆盖内部子系统）
   function tagPick(group, id, skipIfSet) {
     group.traverse(o => {
       if (o.isMesh && !(skipIfSet && o.userData.partId)) { o.userData.partId = id; pickables.push(o); }
     });
+    registerPart(id, group);
   }
 
   function detailHull(group, r, len, cx) {
@@ -198,19 +216,28 @@ export function buildStation(scene) {
     parent.add(g); tagPick(g, partId); return g;
   }
 
-  // 再生生保系统：3 个功能机柜（水循环 / 电解制氧 / CO₂去除）
-  function makeECS(parent, cx, partId) {
-    const g = new THREE.Group(); g.position.x = cx;
-    for (let i = 0; i < 3; i++) {
-      const a = -0.55 + i * 0.55;
-      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.05, 0.95), M.ecs);
-      cab.position.set(0, Math.sin(a) * 1.55, Math.cos(a) * 1.55); cab.lookAt(g.position); g.add(cab);
+  // 再生生保系统：三个独立功能机柜（尿处理/水循环 · 电解制氧 · CO₂ 去除）
+  function makeECS(parent, cx, ids) {
+    const conf = [
+      { id: ids[0], mat: M.ecs,   feat: 'water' },
+      { id: ids[1], mat: M.ecsOxy, feat: 'oxy' },
+      { id: ids[2], mat: M.ecsCo2, feat: 'co2' },
+    ];
+    for (const c of conf) {
+      const sub = new THREE.Group();
+      const a = -0.55 + conf.indexOf(c) * 0.55;
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.05, 0.95), c.mat);
+      cab.position.set(0, Math.sin(a) * 1.55, Math.cos(a) * 1.55); cab.lookAt(sub.position); sub.add(cab);
       const panel = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.34, 0.05), M.dark);
-      panel.position.copy(cab.position); panel.lookAt(0, 0, 0); panel.translateZ(0.5); g.add(panel);
+      panel.position.copy(cab.position); panel.lookAt(0, 0, 0); panel.translateZ(0.5); sub.add(panel);
       const led = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), M.window);
-      led.position.copy(cab.position); led.position.x += 0.4; g.add(led);
+      led.position.copy(cab.position); led.position.x += 0.4; sub.add(led);
+      if (c.feat === 'water') { const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 8, 16), M.arm); ring1.position.copy(cab.position); ring1.translateZ(0.55); sub.add(ring1); }
+      if (c.feat === 'oxy')   { const bub = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x39c0ff, emissiveIntensity: .85 })); bub.position.copy(cab.position); bub.translateZ(0.55); sub.add(bub); }
+      if (c.feat === 'co2')   { const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 12), M.ecsCo2); tube.position.copy(cab.position); tube.translateZ(0.55); sub.add(tube); }
+      parent.add(sub); tagPick(sub, c.id);
     }
-    parent.add(g); tagPick(g, partId); return g;
+    return parent;
   }
 
   // 控制力矩陀螺(CMG)：4 个陀螺金字塔布局，负责无燃料姿态调整
@@ -237,6 +264,22 @@ export function buildStation(scene) {
     parent.add(g); tagPick(g, partId); return g;
   }
 
+  // 生活支持：太空锻炼设备 + 餐厨支持区（两个独立可点击部件）
+  function makeLiving(parent, cx, exId, galId) {
+    const ex = new THREE.Group(); ex.position.set(cx - 1.7, 0, 0);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, 1.4), M.dark); ex.add(frame);
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.7), M.arm); belt.position.y = 0.32; ex.add(belt);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.6, 8), M.arm); post.position.set(0.9, 0.85, 0); ex.add(post);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16), M.joint); handle.position.set(-0.9, 0.95, 0); handle.rotation.y = Math.PI / 2; ex.add(handle);
+    parent.add(ex); tagPick(ex, exId);
+    const gal = new THREE.Group(); gal.position.set(cx + 1.9, 0, 0);
+    const box1 = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.2, 0.8), M.rackB); gal.add(box1);
+    const microwave = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.5), M.arm); microwave.position.set(0, 0.9, 0); gal.add(microwave);
+    const tap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.4, 8), M.window); tap.position.set(0.4, 0.55, 0.4); gal.add(tap);
+    parent.add(gal); tagPick(gal, galId);
+    return parent;
+  }
+
   // 霍尔电推进：资源舱尾部的电推喷口阵列
   function makeHall(parent, x, partId) {
     const g = new THREE.Group(); g.position.x = x;
@@ -250,18 +293,51 @@ export function buildStation(scene) {
     parent.add(g); tagPick(g, partId); return g;
   }
 
-  // 带抽屉/面板的实验机柜群（生命/微重力科学）
-  function makeRacksDetailed(parent, cx, partId, n) {
-    const g = new THREE.Group(); g.position.x = cx;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.3, 0.85), [M.rackA, M.rackB, M.rackC][i % 3]);
-      cab.position.set(0, Math.sin(a) * 1.75, Math.cos(a) * 1.75); cab.lookAt(g.position); g.add(cab);
-      for (let k = 0; k < 3; k++) {
-        const dr = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.5, 0.05), M.dark);
-        dr.position.copy(cab.position); dr.lookAt(0, 0, 0);
-        dr.translateZ(0.46); dr.translateY(-0.6 + k * 0.6); g.add(dr);
+  // 按科研类型分组的实验机柜群（每组独立可点击，并带识别特征小件）
+  function makeRacksDetailed(parent, cx, groups) {
+    for (const grp of groups) {
+      const g = new THREE.Group(); g.position.x = cx;
+      const n = grp.n || 3;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.3, 0.85), [M.rackA, M.rackB, M.rackC][i % 3]);
+        cab.position.set(0, Math.sin(a) * 1.75, Math.cos(a) * 1.75); cab.lookAt(g.position); g.add(cab);
+        for (let k = 0; k < 3; k++) {
+          const dr = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.5, 0.05), M.dark);
+          dr.position.copy(cab.position); dr.lookAt(0, 0, 0);
+          dr.translateZ(0.46); dr.translateY(-0.6 + k * 0.6); g.add(dr);
+        }
+        const fp = cab.position.clone(); fp.z += 0.5;
+        if (grp.kind === 'plant')      { const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0x6fd66f, emissive: 0x1f7a1f, emissiveIntensity: .5 })); leaf.position.copy(fp); g.add(leaf); }
+        if (grp.kind === 'cell')       { const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 16), new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x39c0ff, emissiveIntensity: .7 })); dish.rotation.x = Math.PI / 2; dish.position.copy(fp); g.add(dish); }
+        if (grp.kind === 'eco')        { const soil = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.6), M.shelf); soil.position.set(0, Math.sin(a) * 1.75 - 0.85, Math.cos(a) * 1.75); g.add(soil); }
+        if (grp.kind === 'burner')     { const flame = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshStandardMaterial({ color: 0xffaa33, emissive: 0xff6600, emissiveIntensity: .9 })); flame.position.copy(fp); g.add(flame); }
+        if (grp.kind === 'fluid')      { const pipe = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 8, 16), M.arm); pipe.position.copy(fp); g.add(pipe); }
+        if (grp.kind === 'coldatom')   { const trap = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 8, 20), new THREE.MeshStandardMaterial({ color: 0x222a35, emissive: 0x00eaff, emissiveIntensity: .6 })); trap.position.copy(fp); g.add(trap); }
+        if (grp.kind === 'micrograv')  { const sp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), new THREE.MeshStandardMaterial({ color: 0xffe0a0, emissive: 0xffaa44, emissiveIntensity: .7 })); sp.position.copy(fp); g.add(sp); }
       }
+      parent.add(g); tagPick(g, grp.id);
+    }
+    return parent;
+  }
+
+  // 在轨物资存储机柜（货架 + 货包）
+  function makeStorage(parent, cx, partId) {
+    const g = new THREE.Group(); g.position.x = cx; g.position.y = -0.2;
+    for (let i = 0; i < 3; i++) {
+      const sh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 1.4), M.shelf); sh.position.set(0, -1.0 + i * 0.95, 0); g.add(sh);
+      for (let j = 0; j < 2; j++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.85), [M.rackA, M.rackC][j]); p.position.set(-0.5 + j, -1.0 + i * 0.95 + 0.4, 0); g.add(p); }
+    }
+    parent.add(g); tagPick(g, partId); return g;
+  }
+
+  // 实验舱临时睡眠位（乘组轮换时使用）
+  function makeSleepLab(parent, cx, partId) {
+    const g = new THREE.Group(); g.position.x = cx; g.position.y = 0.2;
+    for (let i = 0; i < 2; i++) {
+      const a = i ? 0.5 : -0.5;
+      const pod = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 1.1, 4, 12), M.sleep);
+      pod.position.set(-1.0 + i * 2.0, Math.sin(a) * 1.0, Math.cos(a) * 1.0); pod.rotation.z = a; g.add(pod);
     }
     parent.add(g); tagPick(g, partId); return g;
   }
@@ -363,8 +439,9 @@ export function buildStation(scene) {
     addRacks(big, -0.6, 0, 6.4, 2.05, 12);
     addDecal(big, -0.6, 2.18, 3.0, 1.8, flagTex, M.flag);
     addDecal(big, 1.6, 2.18, 2.2, 0.9, tgTex, M.label);
-    makeECS(big, -2.4, 'th_ecs');    // 再生生保机柜群（大柱段）
+    makeECS(big, -2.4, ['th_ecs_water', 'th_ecs_oxy', 'th_ecs_co2']); // 再生生保三机柜
     makeSleep(big, 1.6, 'th_sleep'); // 航天员睡眠区（大柱段）
+    makeLiving(big, 0.2, 'th_exercise', 'th_galley'); // 太空锻炼 + 餐厨支持
     big.userData.explodeDir = new THREE.Vector3(0, 0, 0); tianhe.add(big);
 
     const cone = coneX(2.1, 1.45, 1.8, M.hull); cone.position.x = 3.7; tianhe.add(cone);
@@ -386,6 +463,7 @@ export function buildStation(scene) {
     mkSeg(2.9, 0.22, 5.0, 0.5, Math.PI/2 + 0.5);
     const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), M.joint); wrist.position.set(6.3, -0.1, 0); arm.add(wrist);
     makeGripper(arm, new THREE.Vector3(6.3, -0.1, 0), 'th_gripper'); // 末端执行器
+    tagPick(shoulder, 'arm_shoulder'); tagPick(elbow, 'arm_elbow'); tagPick(wrist, 'arm_wrist'); // 机械臂三关节
     arm.position.set(3.4, 2.15, 0); tianhe.add(arm); arms.push(arm);
 
     const node = new THREE.Group();
@@ -404,7 +482,7 @@ export function buildStation(scene) {
     const ant = new THREE.Group();
     const dish = new THREE.Mesh(new THREE.SphereGeometry(0.6, 24, 12, 0, Math.PI*2, 0, Math.PI*0.42), M.white); dish.rotation.x = Math.PI; ant.add(dish);
     const mast = box(0.1, 1.4, 0.1, M.dark); mast.position.y = -0.7; ant.add(mast);
-    ant.position.set(-0.6, 2.3, 0); tianhe.add(ant);
+    ant.position.set(-0.6, 2.3, 0); tianhe.add(ant); tagPick(ant, 'th_comm'); // 中继通信天线
 
     tianhe.userData.explodeDir = new THREE.Vector3(0, 0, 0); tagPick(tianhe, 'tianhe', true);
   }
@@ -420,7 +498,7 @@ export function buildStation(scene) {
     const collar = cylX(1.15, 1.3, M.hullD); collar.position.x = -4.9; g.add(collar);
     const cr = ring(1.05, 0.1, M.dark); cr.rotation.y = Math.PI / 2; cr.position.x = -5.5; g.add(cr);
     if (!isWentian) {
-      const plat = box(2.4, 0.16, 3.2, M.dark); plat.position.set(8.6, -0.9, 0); g.add(plat);
+      const plat = box(2.4, 0.16, 3.2, M.dark); plat.position.set(8.6, -0.9, 0); g.add(plat); tagPick(plat, 'mt_expose'); // 舱外暴露实验平台
     } else {
       const hatch = cylX(1.0, 1.1, M.hullD); hatch.rotation.z = Math.PI / 2; hatch.rotation.y = Math.PI / 2; hatch.position.set(6.2, 1.9, 0); g.add(hatch);
     }
@@ -428,9 +506,11 @@ export function buildStation(scene) {
     const truss = box(1.6, 0.5, 0.5, M.arm); truss.position.x = 11.6; g.add(truss);
     makeWing(new THREE.Vector3(11.9, 0, 0), g, 14.5, 5.2, 'y', 0, -Math.PI / 2, 'wt_sada');
     makeWing(new THREE.Vector3(11.9, 0, 0), g, 14.5, 5.2, 'y', 0,  Math.PI / 2, 'wt_sada');
-    // 内部子系统（生命/微重力科学机柜、气闸、小机械臂）
+    // 内部子系统（科学机柜、气闸、机械臂、生活/载荷支持）
     if (isWentian) {
-      makeRacksDetailed(g, 0.2, 'wt_bio', 6); // 生命科学生橱柜群
+      makeRacksDetailed(g, 0.2, [{id:'wt_bio_plant',n:2,kind:'plant'},{id:'wt_bio_cell',n:2,kind:'cell'},{id:'wt_bio_ecology',n:2,kind:'eco'}]); // 生命/生态实验柜
+      makeStorage(g, -1.0, 'wt_storage'); // 在轨物资存储
+      makeSleepLab(g, 1.0, 'wt_sleep');   // 问天临时睡眠位
       makeAirlock(g, new THREE.Vector3(6.2, 1.9, 0), 'wt_airlock'); // 出舱气闸
       const sa = new THREE.Group();
       const s1 = cylX(0.16, 2.2, M.arm); s1.rotation.z = Math.PI / 2 - 0.4; s1.position.set(1.0, 2.5, 0); sa.add(s1);
@@ -438,7 +518,7 @@ export function buildStation(scene) {
       const s2 = cylX(0.13, 1.9, M.arm); s2.rotation.z = Math.PI / 2 + 0.55; s2.position.set(2.9, 2.3, 0); sa.add(s2);
       sa.position.x = 4.6; g.add(sa); tagPick(sa, 'wt_arm'); // 小机械臂（7 自由度）
     } else {
-      makeRacksDetailed(g, 0.2, 'mt_sci', 8); // 微重力科学机柜群
+      makeRacksDetailed(g, 0.2, [{id:'mt_burner',n:2,kind:'burner'},{id:'mt_fluid',n:2,kind:'fluid'},{id:'mt_coldatom',n:2,kind:'coldatom'},{id:'mt_micrograv',n:2,kind:'micrograv'}]); // 微重力科学柜群
       makeCargoAirlock(g, new THREE.Vector3(8.6, -0.9, 0), 'mt_cargoairlock'); // 货物气闸 + 暴露平台
     }
     tagPick(g, id, true); return g;
@@ -462,6 +542,9 @@ export function buildStation(scene) {
     [-0.5, 0.5].forEach(dz => { const p = box(3.4, 0.08, 1.4, M.white); p.position.set(9.4, 0.2, dz * 1.6); p.rotation.x = dz * 0.35; shenzhou.add(p); });
     const col = cylX(0.9, 0.9, M.dark); col.position.x = 10.9; col.rotation.z = Math.PI / 2; shenzhou.add(col);
     const r = ring(1.28, 0.08, M.orange); r.rotation.y = Math.PI / 2; r.position.x = 13.9; shenzhou.add(r);
+    // 主发动机钟形喷管（Laval 喷管示意）
+    const szNoz = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.5, 0.9, 20, 1, true), M.dark);
+    szNoz.rotation.z = -Math.PI / 2; szNoz.position.set(11.6, 0, 0); shenzhou.add(szNoz); tagPick(szNoz, 'sz_engine');
     makeThruster(new THREE.Vector3(17.4, 0, 0), shenzhou);
     // 三舱分别可点：返回舱 / 轨道舱 / 推进舱
     tagPick(ret, 'sz_return');
@@ -480,6 +563,9 @@ export function buildStation(scene) {
     const col = cylX(0.95, 0.9, M.dark); col.position.x = -8.9; tianzhou.add(col);
     const r = ring(1.5, 0.08, M.orange); r.rotation.y = Math.PI / 2; r.position.x = -13.4; tianzhou.add(r);
     makeShelves(tianzhou, -11.2, 'tz_rack'); // 货物舱货架
+    // 推进剂贮箱（球型，可补加推进剂） + 主发动机喷管
+    for (const dx of [-13.6, -14.6]) { const tank = new THREE.Mesh(new THREE.SphereGeometry(0.85, 18, 14), M.hullD); tank.position.x = dx; tianzhou.add(tank); tagPick(tank, 'tz_prop'); }
+    const tzNoz = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.42, 0.8, 18, 1, true), M.dark); tzNoz.rotation.z = Math.PI / 2; tzNoz.position.set(-17.4, 0, 0); tianzhou.add(tzNoz); tagPick(tzNoz, 'tz_engine');
     makeThruster(new THREE.Vector3(-17.0, 0, 0), tianzhou);
     tagPick(tianzhou, 'tianzhou', true);
   }

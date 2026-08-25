@@ -192,11 +192,11 @@ export function buildEnvironment(scene, renderer) {
   scene.add(stars);
 
   // ── 光照 ──
-  const sun = new THREE.DirectionalLight(0xeaf2ff, 2.2);
+  const sun = new THREE.DirectionalLight(0xeaf2ff, 2.6);
   sun.position.copy(sunDir).multiplyScalar(200);
   scene.add(sun);
-  scene.add(new THREE.AmbientLight(0x223049, 0.45));
-  scene.add(new THREE.HemisphereLight(0x6fb8ff, 0x0a0e16, 0.28));
+  scene.add(new THREE.AmbientLight(0x2a3a55, 0.6));
+  scene.add(new THREE.HemisphereLight(0x8fc6ff, 0x0c1422, 0.4));
 
   let t = 0;
   function update(dt, timeScale) {
